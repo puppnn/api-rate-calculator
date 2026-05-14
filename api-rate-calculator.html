@@ -1,0 +1,825 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>API 中转倍率计算器</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --ink: #162033;
+      --muted: #667085;
+      --line: #d9e1ec;
+      --blue: #2563eb;
+      --blue-soft: #e8f0ff;
+      --green: #0f7b5c;
+      --amber: #a15c00;
+      --shadow: 0 14px 36px rgba(24, 36, 54, 0.10);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+
+    button,
+    select,
+    input {
+      font: inherit;
+    }
+
+    .shell {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px 20px 40px;
+    }
+
+    header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0 0 4px;
+      font-size: 26px;
+      font-weight: 720;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .btn {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--ink);
+      min-height: 36px;
+      padding: 0 12px;
+      border-radius: 7px;
+      cursor: pointer;
+    }
+
+    .btn.primary {
+      background: var(--blue);
+      border-color: var(--blue);
+      color: white;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(320px, 420px) 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel h2 {
+      margin: 0;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      font-size: 16px;
+    }
+
+    .form {
+      padding: 16px;
+      display: grid;
+      gap: 15px;
+    }
+
+    .section-title {
+      margin: 2px 0 -4px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .section-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 2px 0 -4px;
+    }
+
+    .section-line .section-title {
+      margin: 0;
+    }
+
+    .switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .switch input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .switch-track {
+      position: relative;
+      width: 42px;
+      height: 24px;
+      border-radius: 999px;
+      background: #cbd5e1;
+      transition: background 0.18s ease;
+    }
+
+    .switch-track::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: white;
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.24);
+      transition: transform 0.18s ease;
+    }
+
+    .switch input:checked + .switch-track {
+      background: var(--blue);
+    }
+
+    .switch input:checked + .switch-track::after {
+      transform: translateX(18px);
+    }
+
+    .token-fields.is-disabled {
+      opacity: 0.46;
+    }
+
+    .token-fields.is-disabled input {
+      cursor: not-allowed;
+      background: #eef2f7;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    label {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    select,
+    input {
+      width: 100%;
+      height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 8px 10px;
+      color: var(--ink);
+      background: #fbfcff;
+      outline: none;
+    }
+
+    select:focus,
+    input:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px var(--blue-soft);
+      background: white;
+    }
+
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      padding: 16px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      min-height: 96px;
+      background: #fbfcff;
+    }
+
+    .metric strong {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .metric .value {
+      font-size: 23px;
+      font-weight: 760;
+      line-height: 1.15;
+      word-break: break-word;
+    }
+
+    .metric .note {
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .metric.highlight {
+      background: #f1fbf7;
+      border-color: #a9decf;
+    }
+
+    .metric.highlight .value {
+      color: var(--green);
+    }
+
+    .table-wrap {
+      padding: 0 16px 16px;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 620px;
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 8px;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    th:first-child,
+    td:first-child {
+      text-align: left;
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 650;
+      background: #fbfcff;
+    }
+
+    .formula {
+      padding: 14px 16px 16px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+      background: #fbfcff;
+    }
+
+    code {
+      padding: 2px 5px;
+      border-radius: 5px;
+      background: #eef3f9;
+      color: #28374f;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 12px;
+    }
+
+    .sources {
+      padding: 0 16px 16px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .sources a {
+      color: var(--blue);
+      text-decoration: none;
+    }
+
+    .warning {
+      display: none;
+      margin: 0 16px 16px;
+      padding: 10px 12px;
+      border-radius: 7px;
+      background: #fff7ed;
+      border: 1px solid #fed7aa;
+      color: var(--amber);
+      font-size: 13px;
+    }
+
+    @media (max-width: 900px) {
+      header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .result-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 560px) {
+      .shell {
+        padding: 18px 12px 28px;
+      }
+
+      .row,
+      .result-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <h1>API 中转倍率计算器</h1>
+        <p class="subtitle">统一比较分组倍率、三项 token 单价、充值比例和你的实际用量。</p>
+      </div>
+      <div class="actions">
+        <button class="btn" type="button" id="sampleA">填入 5x 缓存加倍样例</button>
+        <button class="btn" type="button" id="sampleB">填入 0.02x 样例</button>
+        <button class="btn primary" type="button" id="reset">恢复默认</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>参数</h2>
+        <div class="form">
+          <div class="section-title">中转规则</div>
+          <div class="row">
+            <div class="field">
+              <label for="group">分组倍率</label>
+              <input id="group" type="number" step="0.000001" min="0" value="5">
+            </div>
+            <div class="field">
+              <label for="rechargeRmb">充值人民币</label>
+              <input id="rechargeRmb" type="number" step="0.000001" min="0" value="1">
+            </div>
+            <div class="field">
+              <label for="rechargeUsd">得到刀余额</label>
+              <input id="rechargeUsd" type="number" step="0.000001" min="0" value="100">
+            </div>
+          </div>
+
+          <div class="section-title">中转单价，每 1M tokens（不含分组倍率）</div>
+          <div class="row">
+            <div class="field">
+              <label for="relayInput">输入</label>
+              <input id="relayInput" type="number" step="0.000001" min="0" value="5">
+            </div>
+            <div class="field">
+              <label for="relayCache">缓存</label>
+              <input id="relayCache" type="number" step="0.000001" min="0" value="0.5">
+            </div>
+            <div class="field">
+              <label for="relayOutput">输出</label>
+              <input id="relayOutput" type="number" step="0.000001" min="0" value="30">
+            </div>
+          </div>
+
+          <div class="section-title">官方基准单价，每 1M tokens</div>
+          <div class="field">
+            <label for="officialPreset">模型价格预设</label>
+            <select id="officialPreset">
+              <option value="custom">自定义</option>
+              <option value="openai-gpt-5.5">OpenAI GPT-5.5 - 5 / 0.5 / 30</option>
+              <option value="openai-gpt-5.4">OpenAI GPT-5.4 - 2.5 / 0.25 / 15</option>
+              <option value="openai-gpt-5.4-mini">OpenAI GPT-5.4 mini - 0.75 / 0.075 / 4.5</option>
+              <option value="claude-opus-4.1">Claude Opus 4.1 / 4 - 15 / 1.5 / 75</option>
+              <option value="claude-sonnet-4">Claude Sonnet 4 / 3.7 - 3 / 0.3 / 15</option>
+              <option value="claude-haiku-3.5">Claude Haiku 3.5 - 0.8 / 0.08 / 4</option>
+              <option value="claude-haiku-3">Claude Haiku 3 - 0.25 / 0.03 / 1.25</option>
+              <option value="gemini-3.1-pro-low">Gemini 3.1 Pro Preview <=200k - 2 / 0.2 / 12</option>
+              <option value="gemini-3.1-pro-high">Gemini 3.1 Pro Preview >200k - 4 / 0.4 / 18</option>
+              <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite - 0.25 / 0.025 / 1.5</option>
+              <option value="gemini-3-flash-preview">Gemini 3 Flash Preview - 0.5 / 0.05 / 3</option>
+              <option value="gemini-2.5-pro-low">Gemini 2.5 Pro <=200k - 1.25 / 0.125 / 10</option>
+              <option value="gemini-2.5-pro-high">Gemini 2.5 Pro >200k - 2.5 / 0.25 / 15</option>
+              <option value="gemini-2.5-flash">Gemini 2.5 Flash - 0.3 / 0.03 / 2.5</option>
+              <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite - 0.1 / 0.01 / 0.4</option>
+            </select>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="officialInput">输入</label>
+              <input id="officialInput" type="number" step="0.000001" min="0" value="5">
+            </div>
+            <div class="field">
+              <label for="officialCache">缓存</label>
+              <input id="officialCache" type="number" step="0.000001" min="0" value="0.5">
+            </div>
+            <div class="field">
+              <label for="officialOutput">输出</label>
+              <input id="officialOutput" type="number" step="0.000001" min="0" value="30">
+            </div>
+          </div>
+
+          <div class="section-line">
+            <div class="section-title">可选：你的实际 tokens</div>
+            <label class="switch" for="useTokens">
+              <span>启用</span>
+              <input id="useTokens" type="checkbox">
+              <span class="switch-track" aria-hidden="true"></span>
+            </label>
+          </div>
+          <div class="row token-fields" id="tokenFields">
+            <div class="field">
+              <label for="tokenInput">非缓存输入 tokens</label>
+              <input id="tokenInput" type="number" step="1" min="0" value="69815187">
+            </div>
+            <div class="field">
+              <label for="tokenCache">缓存 tokens</label>
+              <input id="tokenCache" type="number" step="1" min="0" value="414948480">
+            </div>
+            <div class="field">
+              <label for="tokenOutput">输出 tokens</label>
+              <input id="tokenOutput" type="number" step="1" min="0" value="2970624">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>结果</h2>
+        <div class="result-grid">
+          <div class="metric highlight">
+            <strong>加权整体倍率</strong>
+            <div class="value" id="weightedMultiplier">-</div>
+            <div class="note" id="weightedNote">按实际 token 结构</div>
+          </div>
+          <div class="metric">
+            <strong>缓存命中率</strong>
+            <div class="value" id="cacheHitRate">-</div>
+            <div class="note">缓存 / 总输入</div>
+          </div>
+          <div class="metric">
+            <strong>实际人民币花费</strong>
+            <div class="value" id="rmbCost">-</div>
+            <div class="note">使用当前充值比例</div>
+          </div>
+          <div class="metric">
+            <strong>中转余额成本</strong>
+            <div class="value" id="relayCost">-</div>
+            <div class="note">按中转单价计</div>
+          </div>
+          <div class="metric">
+            <strong>官方基础成本</strong>
+            <div class="value" id="officialCost">-</div>
+            <div class="note">按官方基准价计</div>
+          </div>
+        </div>
+
+        <div class="warning" id="warning"></div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>项目</th>
+                <th>分项倍率</th>
+                <th>官方成本权重</th>
+                <th>中转单价</th>
+                <th>官方单价</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>输入</td>
+                <td id="inputMultiplier">-</td>
+                <td id="inputWeight">-</td>
+                <td id="relayInputView">-</td>
+                <td id="officialInputView">-</td>
+              </tr>
+              <tr>
+                <td>缓存</td>
+                <td id="cacheMultiplier">-</td>
+                <td id="cacheWeight">-</td>
+                <td id="relayCacheView">-</td>
+                <td id="officialCacheView">-</td>
+              </tr>
+              <tr>
+                <td>输出</td>
+                <td id="outputMultiplier">-</td>
+                <td id="outputWeight">-</td>
+                <td id="relayOutputView">-</td>
+                <td id="officialOutputView">-</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="formula">
+          <div><code>分项倍率 = 分组倍率 × 中转单价 / 官方单价 / 每元可买刀数</code></div>
+          <div><code>加权倍率 = 实际人民币花费 / 官方基础成本</code></div>
+          <div>倍率是相对官方价的比较，不等于绝对花费；缓存命中率更高通常会降低绝对成本，但如果中转缓存分项倍率高于输入分项倍率，加权倍率可能会上升。</div>
+        </div>
+        <div class="sources">
+          价格预设最后整理于 2026-05-14，建议大额使用前再核对：
+          <a href="https://openai.com/api/pricing/" target="_blank" rel="noreferrer">OpenAI</a>、
+          <a href="https://www.anthropic.com/pricing#anthropic-api" target="_blank" rel="noreferrer">Anthropic</a>、
+          <a href="https://ai.google.dev/gemini-api/docs/pricing" target="_blank" rel="noreferrer">Google Gemini</a>。
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const ids = [
+      "group", "rechargeRmb", "rechargeUsd",
+      "relayInput", "relayCache", "relayOutput",
+      "officialInput", "officialCache", "officialOutput",
+      "tokenInput", "tokenCache", "tokenOutput", "useTokens"
+    ];
+
+    const $ = (id) => document.getElementById(id);
+
+    const officialPresets = {
+      "openai-gpt-5.5": [5, 0.5, 30],
+      "openai-gpt-5.4": [2.5, 0.25, 15],
+      "openai-gpt-5.4-mini": [0.75, 0.075, 4.5],
+      "claude-opus-4.1": [15, 1.5, 75],
+      "claude-sonnet-4": [3, 0.3, 15],
+      "claude-haiku-3.5": [0.8, 0.08, 4],
+      "claude-haiku-3": [0.25, 0.03, 1.25],
+      "gemini-3.1-pro-low": [2, 0.2, 12],
+      "gemini-3.1-pro-high": [4, 0.4, 18],
+      "gemini-3.1-flash-lite": [0.25, 0.025, 1.5],
+      "gemini-3-flash-preview": [0.5, 0.05, 3],
+      "gemini-2.5-pro-low": [1.25, 0.125, 10],
+      "gemini-2.5-pro-high": [2.5, 0.25, 15],
+      "gemini-2.5-flash": [0.3, 0.03, 2.5],
+      "gemini-2.5-flash-lite": [0.1, 0.01, 0.4]
+    };
+
+    const generalUsage = {
+      input: 700000,
+      cache: 200000,
+      output: 100000
+    };
+
+    const presets = {
+      default: {
+        group: 5,
+        rechargeRmb: 1,
+        rechargeUsd: 100,
+        relayInput: 5,
+        relayCache: 0.5,
+        relayOutput: 30,
+        officialInput: 5,
+        officialCache: 0.5,
+        officialOutput: 30,
+        officialPreset: "openai-gpt-5.5",
+        tokenInput: 69815187,
+        tokenCache: 414948480,
+        tokenOutput: 2970624
+      },
+      cacheDouble: {
+        group: 5,
+        rechargeRmb: 240,
+        rechargeUsd: 15000,
+        relayInput: 5,
+        relayCache: 1,
+        relayOutput: 30,
+        officialInput: 5,
+        officialCache: 0.5,
+        officialOutput: 30,
+        officialPreset: "openai-gpt-5.5",
+        tokenInput: 69815187,
+        tokenCache: 414948480,
+        tokenOutput: 2970624
+      },
+      cheap: {
+        group: 1,
+        rechargeRmb: 1,
+        rechargeUsd: 5,
+        relayInput: 0.5,
+        relayCache: 0.05,
+        relayOutput: 3,
+        officialInput: 5,
+        officialCache: 0.5,
+        officialOutput: 30,
+        officialPreset: "openai-gpt-5.5",
+        tokenInput: 69815187,
+        tokenCache: 414948480,
+        tokenOutput: 2970624
+      }
+    };
+
+    function number(id) {
+      const value = Number($(id).value);
+      return Number.isFinite(value) ? value : 0;
+    }
+
+    function fixed(value, digits = 6) {
+      if (!Number.isFinite(value)) return "-";
+      return value.toFixed(digits);
+    }
+
+    function money(value) {
+      if (!Number.isFinite(value)) return "-";
+      return value.toFixed(6);
+    }
+
+    function pct(value) {
+      if (!Number.isFinite(value)) return "-";
+      return `${(value * 100).toFixed(2)}%`;
+    }
+
+    function priceCost(tokens, prices) {
+      return (
+        tokens.input * prices.input +
+        tokens.cache * prices.cache +
+        tokens.output * prices.output
+      ) / 1000000;
+    }
+
+    function componentMultiplier(group, relay, official, usdPerRmb) {
+      if (official <= 0 || usdPerRmb <= 0) return NaN;
+      return group * relay / official / usdPerRmb;
+    }
+
+    function setPreset(preset) {
+      Object.entries(preset).forEach(([key, value]) => {
+        $(key).value = value;
+      });
+      $("useTokens").checked = preset === presets.cacheDouble;
+      calculate();
+    }
+
+    function calculate() {
+      const group = number("group");
+      const rechargeRmb = number("rechargeRmb");
+      const rechargeUsd = number("rechargeUsd");
+      const usdPerRmb = rechargeRmb > 0 ? rechargeUsd / rechargeRmb : NaN;
+
+      const relay = {
+        input: number("relayInput"),
+        cache: number("relayCache"),
+        output: number("relayOutput")
+      };
+      const official = {
+        input: number("officialInput"),
+        cache: number("officialCache"),
+        output: number("officialOutput")
+      };
+      const useTokens = $("useTokens").checked;
+      const tokens = {
+        input: number("tokenInput"),
+        cache: number("tokenCache"),
+        output: number("tokenOutput")
+      };
+
+      const inputM = componentMultiplier(group, relay.input, official.input, usdPerRmb);
+      const cacheM = componentMultiplier(group, relay.cache, official.cache, usdPerRmb);
+      const outputM = componentMultiplier(group, relay.output, official.output, usdPerRmb);
+
+      const officialCost = priceCost(tokens, official);
+      const relayCost = priceCost(tokens, relay);
+      const rmbCost = relayCost * group / usdPerRmb;
+      const weighted = officialCost > 0 ? rmbCost / officialCost : NaN;
+      const cacheHitRate = tokens.input + tokens.cache > 0
+        ? tokens.cache / (tokens.input + tokens.cache)
+        : NaN;
+      const officialInputCost = tokens.input * official.input / 1000000;
+      const officialCacheCost = tokens.cache * official.cache / 1000000;
+      const officialOutputCost = tokens.output * official.output / 1000000;
+
+      $("inputMultiplier").textContent = `${fixed(inputM)}x (${pct(inputM)})`;
+      $("cacheMultiplier").textContent = `${fixed(cacheM)}x (${pct(cacheM)})`;
+      $("outputMultiplier").textContent = `${fixed(outputM)}x (${pct(outputM)})`;
+
+      if (useTokens) {
+        $("inputWeight").textContent = officialCost > 0 ? pct(officialInputCost / officialCost) : "-";
+        $("cacheWeight").textContent = officialCost > 0 ? pct(officialCacheCost / officialCost) : "-";
+        $("outputWeight").textContent = officialCost > 0 ? pct(officialOutputCost / officialCost) : "-";
+        $("weightedMultiplier").textContent = `${fixed(weighted)}x`;
+        $("weightedNote").textContent = Number.isFinite(weighted) && weighted > 0
+          ? weighted < 1
+            ? `约便宜 ${(1 / weighted).toFixed(2)} 倍`
+            : weighted > 1
+              ? `约贵 ${weighted.toFixed(2)} 倍`
+              : "与官方持平"
+          : "按实际 token 结构";
+        $("cacheHitRate").textContent = pct(cacheHitRate);
+        $("rmbCost").textContent = `${money(rmbCost)} 元`;
+        $("relayCost").textContent = `$${money(relayCost)}`;
+        $("officialCost").textContent = `$${money(officialCost)}`;
+      } else {
+        const generalOfficialCost = priceCost(generalUsage, official);
+        const generalRelayCost = priceCost(generalUsage, relay);
+        const generalRmbCost = generalRelayCost * group / usdPerRmb;
+        const generalWeighted = generalOfficialCost > 0 ? generalRmbCost / generalOfficialCost : NaN;
+        const generalOfficialInputCost = generalUsage.input * official.input / 1000000;
+        const generalOfficialCacheCost = generalUsage.cache * official.cache / 1000000;
+        const generalOfficialOutputCost = generalUsage.output * official.output / 1000000;
+        const generalCacheHitRate = generalUsage.cache / (generalUsage.input + generalUsage.cache);
+        const multiplierValues = [inputM, cacheM, outputM].filter((value) => Number.isFinite(value));
+        const sameMultiplier = multiplierValues.length === 3
+          && Math.max(...multiplierValues) - Math.min(...multiplierValues) < 0.0000005;
+        $("inputWeight").textContent = generalOfficialCost > 0 ? pct(generalOfficialInputCost / generalOfficialCost) : "-";
+        $("cacheWeight").textContent = generalOfficialCost > 0 ? pct(generalOfficialCacheCost / generalOfficialCost) : "-";
+        $("outputWeight").textContent = generalOfficialCost > 0 ? pct(generalOfficialOutputCost / generalOfficialCost) : "-";
+        $("weightedMultiplier").textContent = sameMultiplier
+          ? `${fixed(generalWeighted)}x`
+          : `${fixed(generalWeighted)}x（估算）`;
+        $("weightedNote").textContent = sameMultiplier
+          ? "三项分项倍率一致"
+          : "三项不是统一倍数，按输入70% / 缓存20% / 输出10% 估算";
+        $("cacheHitRate").textContent = "-";
+        $("rmbCost").textContent = "-";
+        $("relayCost").textContent = "-";
+        $("officialCost").textContent = "-";
+      }
+
+      $("tokenFields").classList.toggle("is-disabled", !useTokens);
+      ["tokenInput", "tokenCache", "tokenOutput"].forEach((id) => {
+        $(id).disabled = !useTokens;
+      });
+
+      $("relayInputView").textContent = relay.input;
+      $("relayCacheView").textContent = relay.cache;
+      $("relayOutputView").textContent = relay.output;
+      $("officialInputView").textContent = official.input;
+      $("officialCacheView").textContent = official.cache;
+      $("officialOutputView").textContent = official.output;
+
+      const warning = $("warning");
+      const messages = [];
+      if (!(rechargeRmb > 0 && rechargeUsd > 0)) messages.push("充值人民币和刀余额都必须大于 0。");
+      if (official.input <= 0 || official.cache <= 0 || official.output <= 0) messages.push("官方基准单价必须大于 0。");
+      if (messages.length) {
+        warning.style.display = "block";
+        warning.textContent = messages.join(" ");
+      } else {
+        warning.style.display = "none";
+        warning.textContent = "";
+      }
+    }
+
+    ids.forEach((id) => {
+      const eventName = id === "useTokens" ? "change" : "input";
+      $(id).addEventListener(eventName, calculate);
+    });
+    $("officialPreset").addEventListener("change", () => {
+      const preset = officialPresets[$("officialPreset").value];
+      if (preset) {
+        $("officialInput").value = preset[0];
+        $("officialCache").value = preset[1];
+        $("officialOutput").value = preset[2];
+      }
+      calculate();
+    });
+    ["officialInput", "officialCache", "officialOutput"].forEach((id) => {
+      $(id).addEventListener("input", () => {
+        $("officialPreset").value = "custom";
+      });
+    });
+    $("sampleA").addEventListener("click", () => setPreset(presets.cacheDouble));
+    $("sampleB").addEventListener("click", () => setPreset(presets.cheap));
+    $("reset").addEventListener("click", () => setPreset(presets.default));
+    calculate();
+  </script>
+</body>
+</html>
