@@ -14,9 +14,9 @@
 
 ## 使用方式
 
-直接打开：
+在线打开：
 
-[api-rate-calculator.html](./api-rate-calculator.html)
+[打开 API 中转倍率计算器](https://raw.githack.com/puppnn/api-rate-calculator/main/api-rate-calculator.html)
 
 或者用浏览器打开本地文件：
 
@@ -86,4 +86,3 @@ api-rate-calculator.html
 - [OpenAI API Pricing](https://openai.com/api/pricing/)
 - [Anthropic API Pricing](https://www.anthropic.com/pricing#anthropic-api)
 - [Google Gemini API Pricing](https://ai.google.dev/gemini-api/docs/pricing)
-
