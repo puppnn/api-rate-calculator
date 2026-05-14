@@ -16,7 +16,7 @@
 
 在线打开：
 
-[打开 API 中转倍率计算器](https://raw.githack.com/puppnn/api-rate-calculator/main/api-rate-calculator.html)
+[打开 API 中转倍率计算器](https://puppnn.github.io/api-rate-calculator/)
 
 或者用浏览器打开本地文件：
 
