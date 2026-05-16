@@ -509,6 +509,11 @@
             <div class="value" id="officialCost">-</div>
             <div class="note">按官方基准价计</div>
           </div>
+          <div class="metric">
+            <strong>每 1M tokens 花费</strong>
+            <div class="value" id="weightedMillionCost">-</div>
+            <div class="note" id="weightedMillionNote">按当前结构加权</div>
+          </div>
         </div>
 
         <div class="warning" id="warning"></div>
@@ -520,6 +525,7 @@
                 <th>项目</th>
                 <th>分项倍率</th>
                 <th>官方成本权重</th>
+                <th>每 1M 花费</th>
                 <th>中转单价</th>
                 <th>官方单价</th>
               </tr>
@@ -529,6 +535,7 @@
                 <td>输入</td>
                 <td id="inputMultiplier">-</td>
                 <td id="inputWeight">-</td>
+                <td id="inputMillionCost">-</td>
                 <td id="relayInputView">-</td>
                 <td id="officialInputView">-</td>
               </tr>
@@ -536,6 +543,7 @@
                 <td>缓存</td>
                 <td id="cacheMultiplier">-</td>
                 <td id="cacheWeight">-</td>
+                <td id="cacheMillionCost">-</td>
                 <td id="relayCacheView">-</td>
                 <td id="officialCacheView">-</td>
               </tr>
@@ -543,6 +551,7 @@
                 <td>输出</td>
                 <td id="outputMultiplier">-</td>
                 <td id="outputWeight">-</td>
+                <td id="outputMillionCost">-</td>
                 <td id="relayOutputView">-</td>
                 <td id="officialOutputView">-</td>
               </tr>
@@ -553,6 +562,7 @@
         <div class="formula">
           <div><code>分项倍率 = 分组倍率 × 中转单价 / 官方单价 / 每元可买刀数</code></div>
           <div><code>加权倍率 = 实际人民币花费 / 官方基础成本</code></div>
+          <div><code>每 1M tokens 花费 = 中转单价 × 分组倍率 / 每元可买刀数</code></div>
           <div>倍率是相对官方价的比较，不等于绝对花费；缓存命中率更高通常会降低绝对成本，但如果中转缓存分项倍率高于输入分项倍率，加权倍率可能会上升。</div>
         </div>
         <div class="sources">
@@ -714,6 +724,9 @@
       const inputM = componentMultiplier(group, relay.input, official.input, usdPerRmb);
       const cacheM = componentMultiplier(group, relay.cache, official.cache, usdPerRmb);
       const outputM = componentMultiplier(group, relay.output, official.output, usdPerRmb);
+      const inputMillionCost = relay.input * group / usdPerRmb;
+      const cacheMillionCost = relay.cache * group / usdPerRmb;
+      const outputMillionCost = relay.output * group / usdPerRmb;
 
       const officialCost = priceCost(tokens, official);
       const relayCost = priceCost(tokens, relay);
@@ -729,8 +742,15 @@
       $("inputMultiplier").textContent = `${fixed(inputM)}x (${pct(inputM)})`;
       $("cacheMultiplier").textContent = `${fixed(cacheM)}x (${pct(cacheM)})`;
       $("outputMultiplier").textContent = `${fixed(outputM)}x (${pct(outputM)})`;
+      $("inputMillionCost").textContent = `${money(inputMillionCost)} 元`;
+      $("cacheMillionCost").textContent = `${money(cacheMillionCost)} 元`;
+      $("outputMillionCost").textContent = `${money(outputMillionCost)} 元`;
 
       if (useTokens) {
+        const totalTokens = tokens.input + tokens.cache + tokens.output;
+        const weightedMillionCost = totalTokens > 0
+          ? rmbCost / totalTokens * 1000000
+          : NaN;
         $("inputWeight").textContent = officialCost > 0 ? pct(officialInputCost / officialCost) : "-";
         $("cacheWeight").textContent = officialCost > 0 ? pct(officialCacheCost / officialCost) : "-";
         $("outputWeight").textContent = officialCost > 0 ? pct(officialOutputCost / officialCost) : "-";
@@ -746,10 +766,16 @@
         $("rmbCost").textContent = `${money(rmbCost)} 元`;
         $("relayCost").textContent = `$${money(relayCost)}`;
         $("officialCost").textContent = `$${money(officialCost)}`;
+        $("weightedMillionCost").textContent = `${money(weightedMillionCost)} 元`;
+        $("weightedMillionNote").textContent = "按实际 token 结构";
       } else {
         const generalOfficialCost = priceCost(generalUsage, official);
         const generalRelayCost = priceCost(generalUsage, relay);
         const generalRmbCost = generalRelayCost * group / usdPerRmb;
+        const generalTotalTokens = generalUsage.input + generalUsage.cache + generalUsage.output;
+        const generalMillionCost = generalTotalTokens > 0
+          ? generalRmbCost / generalTotalTokens * 1000000
+          : NaN;
         const generalWeighted = generalOfficialCost > 0 ? generalRmbCost / generalOfficialCost : NaN;
         const generalOfficialInputCost = generalUsage.input * official.input / 1000000;
         const generalOfficialCacheCost = generalUsage.cache * official.cache / 1000000;
@@ -771,6 +797,8 @@
         $("rmbCost").textContent = "-";
         $("relayCost").textContent = "-";
         $("officialCost").textContent = "-";
+        $("weightedMillionCost").textContent = `${money(generalMillionCost)} 元`;
+        $("weightedMillionNote").textContent = "大众估算结构";
       }
 
       $("tokenFields").classList.toggle("is-disabled", !useTokens);
