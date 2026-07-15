@@ -201,6 +201,37 @@
       gap: 6px;
     }
 
+    .price-source-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 8px;
+      align-items: end;
+    }
+
+    .price-source-row .btn {
+      height: 38px;
+      white-space: nowrap;
+    }
+
+    .price-status {
+      min-height: 18px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .price-status.success {
+      color: var(--green);
+    }
+
+    .price-status.error {
+      color: #b42318;
+    }
+
+    .price-status.warning {
+      color: var(--amber);
+    }
+
     label {
       color: var(--muted);
       font-size: 12px;
@@ -366,6 +397,14 @@
       .result-grid {
         grid-template-columns: 1fr;
       }
+
+      .price-source-row {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .price-source-row .field {
+        grid-column: 1 / -1;
+      }
     }
   </style>
 </head>
@@ -441,6 +480,16 @@
               <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite - 0.1 / 0.01 / 0.4</option>
             </select>
           </div>
+          <div class="price-source-row">
+            <div class="field">
+              <label for="litellmModel">LiteLLM 在线价格库</label>
+              <input id="litellmModel" type="search" list="litellmModels" autocomplete="off" placeholder="搜索模型或供应商">
+              <datalist id="litellmModels"></datalist>
+            </div>
+            <button class="btn" type="button" id="refreshLiteLLM">获取/刷新</button>
+            <button class="btn primary" type="button" id="applyLiteLLM">应用价格</button>
+          </div>
+          <div class="price-status" id="litellmStatus" role="status" aria-live="polite">正在加载 LiteLLM 价格库...</div>
           <div class="row">
             <div class="field">
               <label for="officialInput">输入</label>
@@ -566,7 +615,8 @@
           <div>倍率是相对官方价的比较，不等于绝对花费；缓存命中率更高通常会降低绝对成本，但如果中转缓存分项倍率高于输入分项倍率，加权倍率可能会上升。</div>
         </div>
         <div class="sources">
-          价格预设最后整理于 2026-05-14，建议大额使用前再核对：
+          在线价格来自
+          <a href="https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json" target="_blank" rel="noreferrer">LiteLLM 模型价格库</a>；内置预设最后整理于 2026-05-14。大额使用前建议核对：
           <a href="https://openai.com/api/pricing/" target="_blank" rel="noreferrer">OpenAI</a>、
           <a href="https://www.anthropic.com/pricing#anthropic-api" target="_blank" rel="noreferrer">Anthropic</a>、
           <a href="https://ai.google.dev/gemini-api/docs/pricing" target="_blank" rel="noreferrer">Google Gemini</a>。
@@ -584,6 +634,190 @@
     ];
 
     const $ = (id) => document.getElementById(id);
+
+    const LITELLM_PRICES_URL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
+    const LITELLM_CACHE_KEY = "api-rate-calculator-litellm-prices-v1";
+    const LITELLM_SUGGESTION_LIMIT = 80;
+    let liteLLMModels = [];
+    let liteLLMModelsByName = new Map();
+    let liteLLMLoading = false;
+    let liteLLMActiveModel = "";
+
+    function setLiteLLMStatus(message, state = "") {
+      const status = $("litellmStatus");
+      status.textContent = message;
+      status.className = `price-status${state ? ` ${state}` : ""}`;
+    }
+
+    function compactPrice(value) {
+      if (!Number.isFinite(value)) return "-";
+      return Number(value.toFixed(6)).toString();
+    }
+
+    function normalizeLiteLLMModels(payload) {
+      return Object.entries(payload).flatMap(([name, raw]) => {
+        if (!raw || typeof raw !== "object") return [];
+        const inputPerToken = Number(raw.input_cost_per_token);
+        const outputPerToken = Number(raw.output_cost_per_token);
+        if (!(inputPerToken > 0) || !(outputPerToken > 0)) return [];
+
+        const cachePerToken = Number(raw.cache_read_input_token_cost);
+        const hasCachePrice = cachePerToken > 0;
+        const tierThresholds = Object.keys(raw)
+          .map((key) => key.match(/^input_cost_per_token_above_(\d+)k_tokens$/))
+          .filter(Boolean)
+          .map((match) => Number(match[1]))
+          .filter(Number.isFinite)
+          .sort((a, b) => a - b);
+        return [{
+          name,
+          provider: String(raw.litellm_provider || "unknown"),
+          mode: String(raw.mode || ""),
+          input: inputPerToken * 1000000,
+          cache: (hasCachePrice ? cachePerToken : inputPerToken) * 1000000,
+          output: outputPerToken * 1000000,
+          cacheFallback: !hasCachePrice,
+          tierThresholds
+        }];
+      });
+    }
+
+    function modelSearchRank(model, query) {
+      if (!query) return model.provider === "openai" ? 0 : 1;
+      const name = model.name.toLowerCase();
+      const provider = model.provider.toLowerCase();
+      if (name === query) return 0;
+      if (name.startsWith(query)) return 1;
+      if (name.includes(`/${query}`)) return 2;
+      if (name.includes(query)) return 3;
+      if (provider.startsWith(query)) return 4;
+      return 5;
+    }
+
+    function updateLiteLLMSuggestions() {
+      const query = $("litellmModel").value.trim().toLowerCase();
+      const terms = query.split(/\s+/).filter(Boolean);
+      const matches = liteLLMModels
+        .filter((model) => {
+          if (!terms.length) return ["openai", "anthropic", "gemini"].includes(model.provider);
+          const haystack = `${model.name} ${model.provider} ${model.mode}`.toLowerCase();
+          return terms.every((term) => haystack.includes(term));
+        })
+        .sort((a, b) => {
+          const rank = modelSearchRank(a, query) - modelSearchRank(b, query);
+          return rank || a.name.localeCompare(b.name);
+        })
+        .slice(0, LITELLM_SUGGESTION_LIMIT);
+
+      const fragment = document.createDocumentFragment();
+      matches.forEach((model) => {
+        const option = document.createElement("option");
+        option.value = model.name;
+        option.label = `${model.provider} · ${compactPrice(model.input)} / ${compactPrice(model.cache)} / ${compactPrice(model.output)}`;
+        fragment.appendChild(option);
+      });
+      $("litellmModels").replaceChildren(fragment);
+    }
+
+    function setLiteLLMCatalog(models) {
+      liteLLMModels = models;
+      liteLLMModelsByName = new Map(models.map((model) => [model.name, model]));
+      updateLiteLLMSuggestions();
+    }
+
+    function findLiteLLMModel(query) {
+      const exact = liteLLMModelsByName.get(query);
+      if (exact) return exact;
+      const lower = query.toLowerCase();
+      const matches = liteLLMModels.filter((model) => model.name.toLowerCase() === lower);
+      return matches.length === 1 ? matches[0] : null;
+    }
+
+    function readCachedLiteLLMModels() {
+      try {
+        const cached = JSON.parse(localStorage.getItem(LITELLM_CACHE_KEY));
+        if (!cached || !Array.isArray(cached.models) || cached.models.length < 100) return null;
+        return cached;
+      } catch {
+        return null;
+      }
+    }
+
+    function cacheLiteLLMModels(models) {
+      try {
+        localStorage.setItem(LITELLM_CACHE_KEY, JSON.stringify({
+          fetchedAt: new Date().toISOString(),
+          models
+        }));
+      } catch {
+        // The online catalog still works when browser storage is unavailable.
+      }
+    }
+
+    async function fetchLiteLLMModels(forceRefresh = false) {
+      if (liteLLMLoading) return;
+      liteLLMLoading = true;
+      $("refreshLiteLLM").disabled = true;
+      setLiteLLMStatus("正在获取 LiteLLM 价格库...");
+
+      try {
+        const response = await fetch(LITELLM_PRICES_URL, {
+          cache: forceRefresh ? "reload" : "default"
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const models = normalizeLiteLLMModels(await response.json());
+        if (models.length < 100) throw new Error("价格数据不完整");
+        setLiteLLMCatalog(models);
+        cacheLiteLLMModels(models);
+        setLiteLLMStatus(`已加载 ${models.length} 个可计价模型`, "success");
+      } catch (error) {
+        const cached = readCachedLiteLLMModels();
+        if (cached) {
+          setLiteLLMCatalog(cached.models);
+          const fetchedAt = cached.fetchedAt
+            ? new Date(cached.fetchedAt).toLocaleString("zh-CN", { hour12: false })
+            : "未知时间";
+          setLiteLLMStatus(`在线获取失败，使用 ${fetchedAt} 的本地缓存`, "error");
+        } else {
+          setLiteLLMStatus(`LiteLLM 获取失败：${error.message}；仍可使用内置预设`, "error");
+        }
+      } finally {
+        liteLLMLoading = false;
+        $("refreshLiteLLM").disabled = false;
+      }
+    }
+
+    function applyLiteLLMPrice() {
+      const query = $("litellmModel").value.trim();
+      const model = findLiteLLMModel(query);
+      if (!model) {
+        setLiteLLMStatus(
+          liteLLMModels.length
+            ? "请选择列表中的完整模型 ID"
+            : "价格库尚未加载，请先点击获取/刷新",
+          "error"
+        );
+        return;
+      }
+
+      $("officialInput").value = compactPrice(model.input);
+      $("officialCache").value = compactPrice(model.cache);
+      $("officialOutput").value = compactPrice(model.output);
+      $("officialPreset").value = "custom";
+      liteLLMActiveModel = model.name;
+      calculate();
+
+      const notes = [];
+      if (model.cacheFallback) notes.push("无缓存读取价，已按普通输入价");
+      if (model.tierThresholds?.length) {
+        notes.push(`含 >${model.tierThresholds.join("k、>")}k 长上下文阶梯价，当前为基础档`);
+      }
+      const note = notes.length ? `；${notes.join("；")}` : "";
+      setLiteLLMStatus(
+        `已应用 ${model.name}（${model.provider}）：${compactPrice(model.input)} / ${compactPrice(model.cache)} / ${compactPrice(model.output)}${note}`,
+        notes.length ? "warning" : "success"
+      );
+    }
 
     const officialPresets = {
       "openai-gpt-5.5": [5, 0.5, 30],
@@ -695,6 +929,9 @@
         $(key).value = value;
       });
       $("useTokens").checked = preset === presets.cacheDouble;
+      liteLLMActiveModel = "";
+      $("litellmModel").value = "";
+      updateLiteLLMSuggestions();
       calculate();
     }
 
@@ -836,18 +1073,38 @@
         $("officialInput").value = preset[0];
         $("officialCache").value = preset[1];
         $("officialOutput").value = preset[2];
+        liteLLMActiveModel = "";
+        $("litellmModel").value = "";
+        updateLiteLLMSuggestions();
       }
       calculate();
     });
     ["officialInput", "officialCache", "officialOutput"].forEach((id) => {
       $(id).addEventListener("input", () => {
         $("officialPreset").value = "custom";
+        if (liteLLMActiveModel) {
+          setLiteLLMStatus(`${liteLLMActiveModel} 的价格已被手动修改`);
+          liteLLMActiveModel = "";
+        }
       });
     });
+    $("litellmModel").addEventListener("input", updateLiteLLMSuggestions);
+    $("litellmModel").addEventListener("change", () => {
+      if (findLiteLLMModel($("litellmModel").value.trim())) applyLiteLLMPrice();
+    });
+    $("litellmModel").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        applyLiteLLMPrice();
+      }
+    });
+    $("refreshLiteLLM").addEventListener("click", () => fetchLiteLLMModels(true));
+    $("applyLiteLLM").addEventListener("click", applyLiteLLMPrice);
     $("sampleA").addEventListener("click", () => setPreset(presets.cacheDouble));
     $("sampleB").addEventListener("click", () => setPreset(presets.cheap));
     $("reset").addEventListener("click", () => setPreset(presets.default));
     calculate();
+    fetchLiteLLMModels();
   </script>
 </body>
 </html>

@@ -8,6 +8,7 @@
 - 支持人民币充值比例，例如 `1 元买 100 刀`、`240 元买 15000 刀`
 - 支持输入、缓存、输出不同单价
 - 支持 OpenAI、Claude、Gemini 常见模型官方价预设
+- 可从 [LiteLLM 模型价格库](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json) 在线获取并搜索 2000+ 个模型价格
 - 支持填入真实 token 用量，计算加权整体倍率、人民币花费、缓存命中率
 - 显示输入、缓存、输出各自每 1M tokens 的人民币花费
 - 显示按当前结构加权后的每 1M tokens 人民币花费
@@ -25,6 +26,17 @@
 ```text
 api-rate-calculator.html
 ```
+
+## 在线模型价格
+
+页面会自动获取 LiteLLM 的模型价格表。在“LiteLLM 在线价格库”中搜索模型 ID 或供应商，选择模型后点击“应用价格”，即可把价格换算为每 1M tokens 并填入官方基准。
+
+- 输入价使用 `input_cost_per_token`
+- 缓存读取价使用 `cache_read_input_token_cost`
+- 输出价使用 `output_cost_per_token`
+- LiteLLM 未提供缓存读取价时，计算器会提示并暂按普通输入价处理
+- 模型包含长上下文阶梯价时会提示；在线选择默认应用基础档价格
+- 获取失败时会使用上次成功缓存的数据；没有缓存时仍可使用内置预设
 
 ## 默认参数
 
@@ -83,7 +95,7 @@ api-rate-calculator.html
 
 “倍率”是相对官方价的比较，不等于绝对花费。缓存命中率更高通常会降低绝对成本，但如果中转缓存分项倍率高于输入分项倍率，加权倍率可能会上升。
 
-价格预设整理于 `2026-05-14`。大额使用前建议再次核对官方价格：
+在线模型价格来自 LiteLLM 社区价格库，内置预设整理于 `2026-05-14`。大额使用前建议再次核对官方价格：
 
 - [OpenAI API Pricing](https://openai.com/api/pricing/)
 - [Anthropic API Pricing](https://www.anthropic.com/pricing#anthropic-api)
